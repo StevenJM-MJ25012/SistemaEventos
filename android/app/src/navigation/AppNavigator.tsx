@@ -19,7 +19,7 @@ export type RootStackParamList = {
   EventoDetalle:  { eventoId: string; eventoNombre: string };
   Participantes:  { eventoId: string; eventoNombre: string; costo: number };
   Pagos:          { eventoId: string; participanteId: string; participanteNombre: string; costo: number };
-  AgregarPago:    { eventoId: string; participanteId: string; participanteNombre: string };
+  AgregarPago:    { eventoId: string; participanteId: string; participanteNombre: string; costo: number };
 };
 
 export type TabParamList = {

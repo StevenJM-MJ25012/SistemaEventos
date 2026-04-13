@@ -201,6 +201,7 @@ export default function PagosScreen() {
               eventoId,
               participanteId,
               participanteNombre,
+              costo,
             })
           }
         >
@@ -217,6 +218,7 @@ export default function PagosScreen() {
                 eventoId,
                 participanteId,
                 participanteNombre,
+                costo,
               })
             }
           >
