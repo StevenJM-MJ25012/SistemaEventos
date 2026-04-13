@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Modal, RefreshControl,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -19,9 +19,48 @@ export default function PagosScreen() {
   const navigation = useNavigation<Nav>();
   const { eventoId, participanteId, participanteNombre, costo } = useRoute<Ruta>().params;
 
-  const [pagos, setPagos]           = useState<Pago[]>([]);
+  const [pagos, setPagos]             = useState<Pago[]>([]);
   const [totalPagado, setTotalPagado] = useState(0);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [selectedPago, setSelectedPago] = useState<Pago | null>(null);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const getTime = (value: unknown): number => {
+    if (value && typeof value === 'object' && typeof (value as any).toMillis === 'function') {
+      return (value as any).toMillis();
+    }
+    if (typeof value === 'number') {
+      return value;
+    }
+    return 0;
+  };
+
+  const refreshPagos = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const snapshot = await pagosRef().where('participanteId', '==', participanteId).get({ source: 'server' });
+      const docs = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as Pago))
+        .sort((a, b) => getTime((b as any).createdAt) - getTime((a as any).createdAt));
+      const total = docs.reduce((acc, p) => acc + p.monto, 0);
+      setPagos(docs);
+      setTotalPagado(total);
+    } catch (error) {
+      console.warn('Pagos refresh error:', error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, [participanteId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPagos();
+    }, [refreshPagos])
+  );
 
   // ─── Suscripción en tiempo real ──────────────────────────────────────────
   useEffect(() => {
@@ -68,33 +107,34 @@ export default function PagosScreen() {
 
   // ─── Eliminar pago ───────────────────────────────────────────────────────
   const handleEliminarPago = (pago: Pago) => {
-    Alert.alert(
-      'Eliminar pago',
-      `¿Eliminar el abono de $${pago.monto.toLocaleString()} del ${pago.fecha}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar', style: 'destructive',
-          onPress: async () => {
-            try {
-              const batch = firestore().batch();
+    setSelectedPago(pago);
+    setConfirmDeleteVisible(true);
+  };
 
-              // Eliminar el pago
-              batch.delete(pagosRef().doc(pago.id));
+  const confirmEliminarPago = async () => {
+    if (!selectedPago) return;
+    setDeleting(true);
 
-              // Actualizar totalPagado del participante
-              batch.update(participantesRef().doc(participanteId), {
-                totalPagado: firestore.FieldValue.increment(-pago.monto),
-              });
-
-              await batch.commit();
-            } catch {
-              Alert.alert('Error', 'No se pudo eliminar el pago.');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      const batch = firestore().batch();
+      batch.delete(pagosRef().doc(selectedPago.id));
+      batch.update(participantesRef().doc(participanteId), {
+        totalPagado: firestore.FieldValue.increment(-selectedPago.monto),
+      });
+      await batch.commit();
+      setConfirmDeleteVisible(false);
+      setSuccessMessage(
+        `Abono de $${selectedPago.monto.toLocaleString()} eliminado correctamente.`
+      );
+      refreshPagos();
+    } catch (error) {
+      console.warn('Error al eliminar pago:', error);
+      setConfirmDeleteVisible(false);
+      setSuccessMessage('No se pudo eliminar el pago. Intenta nuevamente.');
+    } finally {
+      setDeleting(false);
+      setSelectedPago(null);
+    }
   };
 
   // ─── Métricas ────────────────────────────────────────────────────────────
@@ -245,12 +285,26 @@ export default function PagosScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.screenHeader}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Icon name="chevron-left" size={22} color={COLORS.text} />
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>Pagos</Text>
+        <View style={styles.backButton} />
+      </View>
       <FlatList
         data={pagos}
         keyExtractor={item => item.id}
         renderItem={renderPago}
         ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.lista}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshPagos}
+            tintColor={COLORS.accent}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <Icon name="credit-card-clock-outline" size={48} color={COLORS.accent} />
@@ -261,6 +315,70 @@ export default function PagosScreen() {
           </View>
         }
       />
+
+      <Modal
+        visible={confirmDeleteVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deleting) {
+            setConfirmDeleteVisible(false);
+            setSelectedPago(null);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Eliminar pago</Text>
+            <Text style={styles.modalText}>
+              ¿Eliminar el abono de ${selectedPago?.monto.toLocaleString()} del {selectedPago?.fecha}?
+            </Text>
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  if (!deleting) {
+                    setConfirmDeleteVisible(false);
+                    setSelectedPago(null);
+                  }
+                }}
+                disabled={deleting}
+              >
+                <Text style={styles.modalButtonCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonDelete]}
+                onPress={confirmEliminarPago}
+                disabled={deleting}
+              >
+                <Text style={styles.modalButtonDeleteText}>
+                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(successMessage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSuccessMessage('')}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Resultado</Text>
+            <Text style={styles.modalText}>{successMessage}</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonConfirm, styles.successButton]}
+              onPress={() => setSuccessMessage('')}
+            >
+              <Text style={[styles.modalButtonConfirmText, styles.successButtonText]}>Aceptar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -320,6 +438,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12,
   },
 
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    ...SHADOW.subtle,
+  },
+  backButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  screenTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+
   // Pago card
   pagoCard: {
     backgroundColor: COLORS.surface, borderRadius: 16, padding: 16,
@@ -342,4 +483,84 @@ const styles = StyleSheet.create({
   emptyIcon:     { fontSize: 40 },
   emptyTitulo:   { fontSize: 17, fontWeight: '700', color: COLORS.text },
   emptySubtitulo:{ fontSize: 13, color: COLORS.muted, textAlign: 'center' },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOW.card,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+  modalText: {
+    fontSize: 14,
+    color: COLORS.muted,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalButtonDelete: {
+    backgroundColor: COLORS.danger,
+  },
+  modalButtonConfirm: {
+    backgroundColor: COLORS.accent,
+    marginTop: 4,
+  },
+  modalButtonCancelText: {
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  modalButtonDeleteText: {
+    color: COLORS.onAccent,
+    fontWeight: '700',
+  },
+  modalButtonConfirmText: {
+    color: COLORS.onAccent,
+    fontWeight: '700',
+  },
+  successButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.accent,
+  },
+  successButtonText: {
+    color: COLORS.onAccent,
+    fontSize: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
 });

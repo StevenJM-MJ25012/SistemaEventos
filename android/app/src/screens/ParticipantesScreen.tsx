@@ -32,6 +32,9 @@ export default function ParticipantesScreen() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmation, setConfirmation] = useState({ visible: false, title: '', message: '' });
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState<ParticipanteConSaldo | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [limiteInfo, setLimiteInfo] = useState({ actual: 0, limite: 0 });
 
   // ─── Obtener color de avatar según inicial
@@ -187,32 +190,38 @@ export default function ParticipantesScreen() {
 
   // ─── Eliminar participante
   const handleEliminar = (item: ParticipanteConSaldo) => {
-    Alert.alert(
-      'Eliminar participante',
-      `¿Eliminar a "${item.nombre}"? Se eliminarán todos sus pagos registrados.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const batch = firestore().batch();
+    setSelectedParticipant(item);
+    setDeleteModalVisible(true);
+  };
 
-              const pagosSnap = await pagosRef()
-                .where('participanteId', '==', item.id)
-                .get();
-              pagosSnap.docs.forEach(d => batch.delete(d.ref));
+  const confirmEliminarParticipante = async () => {
+    if (!selectedParticipant) return;
+    setDeleting(true);
 
-              batch.delete(participantesRef().doc(item.id));
-              await batch.commit();
-            } catch {
-              Alert.alert('Error', 'No se pudo eliminar el participante.');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      const batch = firestore().batch();
+      const pagosSnap = await pagosRef()
+        .where('participanteId', '==', selectedParticipant.id)
+        .get();
+      pagosSnap.docs.forEach(d => batch.delete(d.ref));
+      batch.delete(participantesRef().doc(selectedParticipant.id));
+      await batch.commit();
+
+      setDeleteModalVisible(false);
+      setConfirmation({
+        visible: true,
+        title: 'Participante eliminado',
+        message: `Se eliminó a ${selectedParticipant.nombre} y sus pagos registrados.`,
+      });
+      setParticipantes(prev => prev.filter(p => p.id !== selectedParticipant.id));
+      setLimiteInfo(prev => ({ ...prev, actual: Math.max(prev.actual - 1, 0) }));
+    } catch (error) {
+      console.warn('Eliminar participante error:', error);
+      Alert.alert('Error', 'No se pudo eliminar el participante.');
+    } finally {
+      setDeleting(false);
+      setSelectedParticipant(null);
+    }
   };
 
   // ─── Render item
@@ -323,7 +332,9 @@ export default function ParticipantesScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Icon name="chevron-left" size={24} color={COLORS.text} />
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Icon name="chevron-left" size={24} color={COLORS.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Participantes</Text>
         <TouchableOpacity
           style={[styles.addButton, lleno && styles.addButtonDisabled]}
@@ -463,6 +474,50 @@ export default function ParticipantesScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deleting) {
+            setDeleteModalVisible(false);
+            setSelectedParticipant(null);
+          }
+        }}
+      >
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalTitle}>Eliminar participante</Text>
+            <Text style={styles.deleteModalText}>
+              ¿Eliminar a {selectedParticipant?.nombre}? Se eliminarán todos sus pagos registrados.
+            </Text>
+            <View style={styles.deleteModalButtons}>
+              <TouchableOpacity
+                style={[styles.deleteModalButton, styles.deleteModalCancel]}
+                onPress={() => {
+                  if (!deleting) {
+                    setDeleteModalVisible(false);
+                    setSelectedParticipant(null);
+                  }
+                }}
+                disabled={deleting}
+              >
+                <Text style={styles.deleteModalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteModalButton, styles.deleteModalConfirm]}
+                onPress={confirmEliminarParticipante}
+                disabled={deleting}
+              >
+                <Text style={styles.deleteModalConfirmText}>
+                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={confirmation.visible} animationType="fade" transparent>
@@ -815,6 +870,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  deleteModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    padding: 24,
+  },
+  deleteModalBox: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOW.card,
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+  deleteModalText: {
+    fontSize: 14,
+    color: COLORS.muted,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  deleteModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  deleteModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteModalCancel: {
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  deleteModalConfirm: {
+    backgroundColor: COLORS.danger,
+  },
+  deleteModalCancelText: {
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  deleteModalConfirmText: {
+    color: COLORS.onAccent,
+    fontWeight: '700',
   },
   confirmationBox: {
     width: '85%',

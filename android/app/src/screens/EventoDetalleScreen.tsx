@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl,
@@ -27,6 +27,48 @@ export default function EventoDetalleScreen() {
   const [participantes, setParticipantes] = useState<ParticipanteConSaldo[]>([]);
   const [loading, setLoading]             = useState(true);
   const [refreshing, setRefreshing]       = useState(false);
+
+  const refreshData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const eventoSnap = await eventosRef().doc(eventoId).get({ source: 'server' });
+      if (eventoSnap.exists()) {
+        setEvento({ id: eventoSnap.id, ...eventoSnap.data() } as Evento);
+      }
+
+      const snapshot = await participantesRef()
+        .where('eventoId', '==', eventoId)
+        .orderBy('nombre', 'asc')
+        .get({ source: 'server' });
+
+      if (!snapshot || !snapshot.docs) {
+        setParticipantes([]);
+        setRefreshing(false);
+        setLoading(false);
+        return;
+      }
+
+      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Participante));
+      const costo = eventoSnap.exists() ? (eventoSnap.data()?.costo ?? 0) : 0;
+      const conSaldo: ParticipanteConSaldo[] = docs.map(p => ({
+        ...p,
+        saldo: Math.max(costo - p.totalPagado, 0),
+        porcentaje: costo > 0 ? Math.min((p.totalPagado / costo) * 100, 100) : 0,
+      }));
+
+      setParticipantes(conSaldo);
+    } catch (error) {
+      console.warn('EventoDetalle refresh error:', error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, [eventoId]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', refreshData);
+    return unsubscribe;
+  }, [navigation, refreshData]);
 
   useEffect(() => {
     const unsubEvento = eventosRef()
@@ -254,6 +296,13 @@ export default function EventoDetalleScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.screenHeader}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Icon name="chevron-left" size={22} color={COLORS.text} />
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>{evento?.nombre ?? eventoNombre}</Text>
+        <View style={styles.backButton} />
+      </View>
       <FlatList
         data={participantes}
         keyExtractor={item => item.id}
@@ -261,7 +310,7 @@ export default function EventoDetalleScreen() {
         ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.lista}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} />
+          <RefreshControl refreshing={refreshing} onRefresh={refreshData} tintColor={COLORS.accent} />
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
@@ -331,6 +380,29 @@ const styles = StyleSheet.create({
   },
   heroBarraLabel: {
     fontSize: 11, color: 'rgba(255,255,255,0.6)', textAlign: 'right',
+  },
+
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    ...SHADOW.subtle,
+  },
+  backButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  screenTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
   },
 
   // ── Chips ──
