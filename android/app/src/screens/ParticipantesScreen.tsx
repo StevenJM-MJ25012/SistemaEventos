@@ -328,6 +328,58 @@ export default function ParticipantesScreen() {
     participant.nombre.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const renderListHeader = () => (
+    <>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrap}>
+          <Icon name="magnify" size={20} color={COLORS.muted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar participante..."
+            placeholderTextColor={COLORS.muted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Icon name="close-circle" size={18} color={COLORS.muted} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {searchQuery ? (
+          <Text style={styles.searchMeta}>
+            {filteredParticipants.length} de {participantes.length} resultados
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.quotaSection}>
+        <View style={styles.quotaContent}>
+          <Icon name="account-multiple" size={28} color={COLORS.accent} />
+          <View style={styles.quotaTextContainer}>
+            <Text style={styles.quotaLabel}>CUPO DEL EVENTO</Text>
+            <Text style={styles.quotaNumber}>
+              {limiteInfo.actual} / {limiteInfo.limite} inscritos
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.quotaBadge}>
+          <Text style={styles.quotaText}>{limiteInfo.limite - limiteInfo.actual} lugares</Text>
+        </View>
+      </View>
+
+      <Text style={styles.quotaPercentage}>
+        {Math.round((limiteInfo.actual / limiteInfo.limite) * 100)}% del cupo ocupado
+      </Text>
+
+      <Text style={styles.listTitle}>
+        LISTA DE PARTICIPANTES
+        <Text style={styles.registeredCount}> {limiteInfo.actual} registrados</Text>
+      </Text>
+    </>
+  );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -352,57 +404,8 @@ export default function ParticipantesScreen() {
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        ListHeaderComponent={() => (
-          <>
-            <View style={styles.searchContainer}>
-              <View style={styles.searchInputWrap}>
-                <Icon name="magnify" size={20} color={COLORS.muted} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Buscar participante..."
-                  placeholderTextColor={COLORS.muted}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-                {searchQuery ? (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <Icon name="close-circle" size={18} color={COLORS.muted} />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-              {searchQuery ? (
-                <Text style={styles.searchMeta}>
-                  {filteredParticipants.length} de {participantes.length} resultados
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={styles.quotaSection}>
-              <View style={styles.quotaContent}>
-                <Icon name="account-multiple" size={28} color={COLORS.accent} />
-                <View style={styles.quotaTextContainer}>
-                  <Text style={styles.quotaLabel}>CUPO DEL EVENTO</Text>
-                  <Text style={styles.quotaNumber}>
-                    {limiteInfo.actual} / {limiteInfo.limite} inscritos
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.quotaBadge}>
-                <Text style={styles.quotaText}>{disponibles} lugares</Text>
-              </View>
-            </View>
-
-            <Text style={styles.quotaPercentage}>
-              {Math.round((limiteInfo.actual / limiteInfo.limite) * 100)}% del cupo ocupado
-            </Text>
-
-            <Text style={styles.listTitle}>
-              LISTA DE PARTICIPANTES
-              <Text style={styles.registeredCount}> {limiteInfo.actual} registrados</Text>
-            </Text>
-          </>
-        )}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={renderListHeader}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListEmptyComponent={() => (
           <View style={styles.emptyBox}>
