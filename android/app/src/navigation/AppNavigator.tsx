@@ -12,14 +12,18 @@ import EventoDetalleScreen  from '../screens/EventoDetalleScreen';
 import ParticipantesScreen  from '../screens/ParticipantesScreen';
 import PagosScreen          from '../screens/PagosScreen';
 import AgregarPagoScreen    from '../screens/AgregarPagoScreen';
+import ComidaEventoScreen   from '../screens/ComidaEventoScreen';
+import AsignarComidaScreen  from '../screens/AsignarComidaScreen';
 
-// ─── Tipos ─────────────────────────────────────────────────────────────────
+// ─── Tipos ───────────────────────────────────────────────────────────
 export type RootStackParamList = {
   MainTabs:       undefined;
   EventoDetalle:  { eventoId: string; eventoNombre: string };
   Participantes:  { eventoId: string; eventoNombre: string; costo: number };
   Pagos:          { eventoId: string; participanteId: string; participanteNombre: string; costo: number };
   AgregarPago:    { eventoId: string; participanteId: string; participanteNombre: string; costo: number };
+  ComidaEvento:   { eventoId: string; eventoNombre: string };
+  AsignarComida:  { eventoId: string; eventoNombre: string };
 };
 
 export type TabParamList = {
@@ -199,6 +203,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Participantes" component={ParticipantesScreen} />
         <Stack.Screen name="Pagos"         component={PagosScreen} />
         <Stack.Screen name="AgregarPago"   component={AgregarPagoScreen} />
+        <Stack.Screen name="ComidaEvento"  component={ComidaEventoScreen} />
+        <Stack.Screen name="AsignarComida" component={AsignarComidaScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
