@@ -40,25 +40,30 @@ export type TipoTiempoComida = 'Desayuno' | 'Almuerzo' | 'Merienda' | 'Cena';
 
 export interface PlatoMenu {
   id: string;
+  eventoId: string;
+  dia: number;
   nombre: string;
   tipo: TipoTiempoComida;
   descripcion?: string;
-  cantidad?: number;
+  cantidad: number;
   createdAt: string;
 }
 
 export interface BebidaMenu {
   id: string;
+  eventoId: string;
+  dia: number;
   nombre: string;
   tipo: TipoTiempoComida;
   descripcion?: string;
-  cantidad?: number;
+  cantidad: number;
   createdAt: string;
 }
 
 export interface TiempoComidaEvento {
   id: string;
   eventoId: string;
+  dia: number;
   tipo: TipoTiempoComida;
   hora?: string;
   descripcion?: string;
@@ -69,8 +74,8 @@ export interface TiempoComidaEvento {
 export interface ComidaEvento {
   id: string;
   eventoId: string;
-  menuPlatos: PlatoMenu[];
-  menuBebidas: BebidaMenu[];
+  diasEvento: number;
+  menuPrincpal: PlatoMenu[];
   tiemposComida: TiempoComidaEvento[];
   createdAt: string;
 }
@@ -78,6 +83,7 @@ export interface ComidaEvento {
 export interface AsignacionComida {
   id: string;
   eventoId: string;
+  dia: number;
   participanteId: string;
   participanteNombre: string;
   tiempoComidaId: string;
@@ -94,6 +100,7 @@ export interface AsignacionComida {
 export interface EntregaComida {
   id: string;
   eventoId: string;
+  dia: number;
   asignacionComidaId: string;
   participanteId: string;
   participanteNombre: string;
@@ -109,6 +116,7 @@ export interface EntregaComida {
 export interface ResumenPlatos {
   platoNombre: string;
   tipo: string;
+  dia: number;
   cantidad: number;
   entregados: number;
   pendientes: number;
@@ -117,7 +125,27 @@ export interface ResumenPlatos {
 export interface ResumenBebidas {
   bebidaNombre: string;
   tipo: string;
+  dia: number;
   cantidad: number;
   entregadas: number;
   pendientes: number;
+}
+
+export interface RespuestaEncuesta {
+  id: string;
+  eventoId: string;
+  participanteName: string;
+  participanteEmail: string;
+  respuestasPorDia: {
+    [dia: string]: {
+      [tipo: string]: {
+        platoId: string;
+        platoNombre: string;
+        bebidaId: string;
+        bebidaNombre: string;
+      };
+    };
+  };
+  createdAt: string;
+  estado: 'completa' | 'pendiente';
 }
